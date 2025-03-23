@@ -8,7 +8,8 @@ import gym
 
 class armEnv(gym.Env):
     def __init__(self):
-        physicsClient = p.connect(p.GUI)  # 或者 p.DIRECT
+        super().__init__()
+        self.physicsClient = p.connect(p.GUI)  # 或者 p.DIRECT
         p.resetSimulation()
         p.setGravity(0, 0, -9.81)  # 设置重力
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
@@ -25,11 +26,12 @@ class armEnv(gym.Env):
         self.colaId = p.loadURDF("Household-items-urdfs/urdf/cola.urdf",[rand_x,1,0.32])
         self.position = [rand_x,1,0.32]
         self.target_position = [0, -1, 0]
+        self.origin_distance = np.linalg.norm(np.array((self.position)) - np.array(self.target_position), axis=-1)
         self.end_effector_link_index = 7
         self.state_dim = 15
         self.action_bound = [1]*self.action_dim
         for i in range(4,7):
-            self.action_bound[i] = np.pi/2
+            self.action_bound[i] = np.pi
         p.changeDynamics(bodyUniqueId=self.colaId,
                          linkIndex=-1,  # 对 base 使用 -1
                          lateralFriction=5.0,
@@ -61,6 +63,7 @@ class armEnv(gym.Env):
         self.colaId = p.loadURDF("Household-items-urdfs/urdf/cola.urdf", [rand_x, 1, 0.32])
         self.position = [rand_x, 1, 0.32]
         self.target_position = [0, -1, 0]
+        self.origin_distance = np.linalg.norm(np.array((self.position)) - np.array(self.target_position), axis=-1)
         p.changeDynamics(bodyUniqueId=self.colaId,
                          linkIndex=-1,  # 对 base 使用 -1
                          lateralFriction=5.0,
@@ -74,10 +77,10 @@ class armEnv(gym.Env):
         goal = np.array(goal)
         assert achieved_goal.shape == goal.shape
         dis =np.linalg.norm(achieved_goal - goal, axis=-1)
-        if dis>self.distance_threshold:
-            return [False,-1]
-        else:
-            return [True,0]
+        reward = self.origin_distance-dis
+        flag = dis<self.distance_threshold
+        return [flag,reward]
+
 
     def get_obs(self):
         state = p.getLinkState(self.robotId[0], self.end_effector_link_index,computeLinkVelocity=1)
@@ -131,9 +134,9 @@ class armEnv(gym.Env):
             new_pos,  # 目标末端位置
             target_orientation
         )
-        if Commands[-1]==1:
+        if Commands[-1]>0.5:
             close_gripper(self.robotId[0])
-        if Commands[-1]==-1:
+        if Commands[-1]<-0.5:
             open_gripper(self.robotId[0])
         p.setJointMotorControlArray(
             bodyUniqueId=self.robotId[0],  # 机械臂ID
@@ -141,6 +144,11 @@ class armEnv(gym.Env):
             controlMode=p.POSITION_CONTROL,  # 控制模式：位置控制
             targetPositions=targetPositionsJoints[0:self.end_effector_link_index]  # IK 求解得到的目标关节角
         )
+
+    def close(self):
+        if self.physicsClient is not None:
+            p.disconnect(self.physicsClient)
+            self.physicsClient = None
 
 
 

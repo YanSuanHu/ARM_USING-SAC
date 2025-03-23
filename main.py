@@ -7,9 +7,11 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import random
 
 MAX_EPISODES = 500
 MAX_EP_STEPS = 200
+
 
 env = armEnv()
 s_dim = env.state_dim
@@ -24,10 +26,15 @@ tau = 0.005  # 软更新参数
 buffer_size = 10000
 minimal_size = 500
 batch_size = 64
-target_entropy = -1
+target_entropy = -float(a_dim)
 reward_list =[]
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device(
     "cpu")
+
+seed = 42
+np.random.seed(seed)
+torch.manual_seed(seed)
+random.seed(seed)
 
 rl = SAC(s_dim, hidden_dim, a_dim, a_bound,actor_lr,critic_lr,alpha_lr,target_entropy,tau,gamma,device)
 replay_buffer = ReplayBuffer(buffer_size)
