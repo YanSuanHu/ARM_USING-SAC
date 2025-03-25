@@ -9,7 +9,7 @@ import gym
 class armEnv(gym.Env):
     def __init__(self):
         super().__init__()
-        self.physicsClient = p.connect(p.GUI)  # 或者 p.DIRECT
+        self.physicsClient = p.connect(p.DIRECT)  # 或者 p.DIRECT
         p.resetSimulation()
         p.setGravity(0, 0, -9.81)  # 设置重力
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
@@ -26,7 +26,7 @@ class armEnv(gym.Env):
         self.colaId = p.loadURDF("Household-items-urdfs/urdf/cola.urdf",[rand_x,0.8,0.32])
         self.position = [rand_x,0.8,0.32]
         self.target_position = [0, -1, 0.08]
-        # self.origin_distance = np.linalg.norm(np.array((self.position)) - np.array(self.target_position), axis=-1)
+        self.origin_distance = np.linalg.norm(np.array((self.position)) - np.array(self.target_position), axis=-1)
         self.end_effector_link_index = 7
         self.state_dim = 12
         self.action_bound = [0.5]*self.action_dim
@@ -63,7 +63,7 @@ class armEnv(gym.Env):
         self.colaId = p.loadURDF("Household-items-urdfs/urdf/cola.urdf", [rand_x, 0.8, 0.32])
         self.position = [rand_x, 0.8, 0.32]
         self.target_position = [0, -1, 0.08]
-        # self.origin_distance = np.linalg.norm(np.array((self.position)) - np.array(self.target_position), axis=-1)
+        self.origin_distance = np.linalg.norm(np.array((self.position)) - np.array(self.target_position), axis=-1)
         p.changeDynamics(bodyUniqueId=self.colaId,
                          linkIndex=-1,  # 对 base 使用 -1
                          lateralFriction=25,
@@ -79,11 +79,11 @@ class armEnv(gym.Env):
         dis =np.linalg.norm(achieved_goal - goal, axis=-1)
         flag = dis<self.distance_threshold
         if flag:
-            # reward = 2000
-            reward = 0
+            reward = 2000
+            # reward = 0
         else:
-            # reward = max(self.origin_distance - dis, 0)
-            reward = -1
+            reward = max(self.origin_distance - dis, 0)
+            # reward = -1
         return [flag,reward]
 
 

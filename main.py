@@ -18,15 +18,15 @@ env = armEnv()
 s_dim = env.state_dim
 a_dim = env.action_dim
 a_bound = env.action_bound
-actor_lr = 1e-3
-critic_lr = 1e-3
-alpha_lr = 1e-2
-hidden_dim = 128
-gamma = 0.98
+actor_lr = 3e-4
+critic_lr = 3e-4
+alpha_lr = 0.2
+hidden_dim = 256
+gamma = 0.99
 tau = 0.005  # 软更新参数
-buffer_size = 10000
+buffer_size = 100000
 minimal_size = 500
-batch_size = 64
+batch_size = 256
 target_entropy = -float(a_dim)
 reward_list =[]
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device(
@@ -38,7 +38,7 @@ torch.manual_seed(seed)
 random.seed(seed)
 rl = SAC(s_dim, hidden_dim, a_dim, a_bound,actor_lr,critic_lr,alpha_lr,target_entropy,tau,gamma,device)
 
-demo_data = np.load("master_data.npz")
+demo_data = np.load("master_data_dense.npz",allow_pickle=True)
 obs_demo = demo_data["obs"]
 act_demo = demo_data["act"]
 next_obs_demo = demo_data["obs_next"]
@@ -46,15 +46,23 @@ rewards_demo = demo_data["rewards"]
 done_demo = demo_data["done"]
 
 replay_buffer = ReplayBuffer(buffer_size)
-num_episodes, episode_length, _ = obs_demo.shape
+num_episodes = len(obs_demo)
+
 for i in range(num_episodes):
-    for j in range(episode_length):
+    # 对于每个 episode，取出对应的所有转移数据
+    episode_obs = obs_demo[i]
+    episode_act = act_demo[i]
+    episode_rewards = rewards_demo[i]
+    episode_next_obs = next_obs_demo[i]
+    episode_done = done_demo[i]
+    # 对于该 episode 中的每个时间步（transition）
+    for j in range(len(episode_obs)):
         replay_buffer.store_transition(
-            obs_demo[i, j],
-            act_demo[i, j],
-            rewards_demo[i, j],
-            next_obs_demo[i, j],
-            done_demo[i, j]
+            episode_obs[j],
+            episode_act[j],
+            episode_rewards[j],
+            episode_next_obs[j],
+            episode_done[j]
         )
 
 for episode in range(MAX_EPISODES):

@@ -4,7 +4,7 @@ import numpy as np
 import random
 from env import armEnv
 
-demo_num=1000
+demo_num=10
 
 
 def launch():
@@ -14,7 +14,7 @@ def launch():
     max_timesteps = 220
     collect_demo_data(env,max_timesteps)
 
-def collect_demo_data(env, max_timesteps,needed_success=1000):
+def collect_demo_data(env, max_timesteps,needed_success=demo_num):
     # 用于存储所有成功episode的数据
     obs_total = []
     actions_total = []
@@ -24,7 +24,9 @@ def collect_demo_data(env, max_timesteps,needed_success=1000):
 
     success_count = 0
     max_episodes = 50000  # 最多尝试的episode数
-
+    x_total = 0
+    y_total = 0
+    z_total = 0
 
     for episode_i in range(max_episodes):
         if success_count >= needed_success:
@@ -39,9 +41,8 @@ def collect_demo_data(env, max_timesteps,needed_success=1000):
 
         # 重置环境
         obs = env.reset()
-        x_total =0
-        y_total = 0
-        z_total = 0
+
+        reward_total = 0
         old_pos = np.array(obs[:3]).astype(float)
         old_euler =np.array(obs[3:6]).astype(float)
         old_cola = np.array(obs[6:9]).astype(float)
@@ -111,36 +112,45 @@ def collect_demo_data(env, max_timesteps,needed_success=1000):
                 new_pos = end_effector_pos
                 new_euler = end_effector_euler
             if t==219:
-                print("第",episode_i," 次")
-                print("机械臂最终角度",end_effector_euler)
-                print("机械臂最终位置",end_effector_pos)
-                print("可乐最终位置",cola_pos)
+                print("第",episode_i+1," 次")
+                # print("机械臂最终角度",end_effector_euler)
+                # print("机械臂最终位置",end_effector_pos)
+                # print("可乐最终位置",cola_pos)
                 print("距离为",np.linalg.norm(np.array(cola_pos) - np.array([0,-1,0.08]), axis=-1))
+                print("奖励为",reward_total)
                 x_total += cola_pos[0]
                 y_total += cola_pos[1]
                 z_total +=cola_pos[2]
             ep_obs .append(obs.copy())
             ep_acts.append(act.copy())
             obs,reward,done = env.step(act)
+            reward_total += reward
             ep_rewards.append(reward)
             ep_next_obs.append(obs.copy())
             ep_done.append(done)
-        if done:
-            success_count+=1
-            obs_total.append(ep_obs)
-            actions_total.append(ep_acts)
-            next_obs_total.append(ep_next_obs)
-            rewards_total.append(ep_rewards)
-            done_total.append(ep_done)
-            print(f"第 {episode_i + 1} 个 episode 成功，已收集成功示范 {success_count} 条。")
-    file = "master_data.npz"
+            if done:
+                success_count+=1
+                obs_total.append(ep_obs)
+                actions_total.append(ep_acts)
+                next_obs_total.append(ep_next_obs)
+                rewards_total.append(ep_rewards)
+                done_total.append(ep_done)
+                print(f"第 {episode_i + 1} 个 episode 成功，已收集成功示范 {success_count} 条。")
+                print("奖励为", reward_total)
+                break
+    file = "master_data_dense.npz"
     print("完成！")
-    print(x_total/100)
-    print(y_total/100)
-    print(z_total/100)
+    # print(x_total/100)
+    # print(y_total/100)
+    # print(z_total/100)
     print(success_count)
-    np.savez_compressed(file, act=np.array(actions_total).squeeze(), obs=np.array(obs_total).squeeze(),
-                        obs_next = np.array(next_obs_total).squeeze(),
-                        rewards=np.array(rewards_total).squeeze(),done=np.array(done_total).squeeze())
+    np.savez_compressed(
+        file,
+        act=np.array(actions_total, dtype=object),
+        obs=np.array(obs_total, dtype=object),
+        obs_next=np.array(next_obs_total, dtype=object),
+        rewards=np.array(rewards_total, dtype=object),
+        done=np.array(done_total, dtype=object)
+    )
 if __name__=="__main__":
     launch()
