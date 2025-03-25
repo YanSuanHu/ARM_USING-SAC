@@ -107,26 +107,22 @@ class SAC:
             param_target.data.copy_(param_target.data * (1.0 - self.tau) +
                                     param.data * self.tau)
 
-    def update(self, transition_dict):
-        states = torch.tensor(transition_dict['states'],
-                              dtype=torch.float).to(self.device)
-        actions = torch.tensor(transition_dict['actions'],
-                               dtype=torch.float).to(self.device)
-        rewards = torch.tensor(transition_dict['rewards'],
-                               dtype=torch.float).view(-1, 1).to(self.device)
-        next_states = torch.tensor(transition_dict['next_states'],
-                                   dtype=torch.float).to(self.device)
-        dones = torch.tensor(transition_dict['dones'],
-                             dtype=torch.float).view(-1, 1).to(self.device)
+    def update(self, transition_dict,is_weights):
+        states = torch.tensor(transition_dict['states'], dtype=torch.float).to(self.device)
+        actions = torch.tensor(transition_dict['actions'], dtype=torch.float).to(self.device)
+        rewards = torch.tensor(transition_dict['rewards'], dtype=torch.float).view(-1, 1).to(self.device)
+        next_states = torch.tensor(transition_dict['next_states'], dtype=torch.float).to(self.device)
+        dones = torch.tensor(transition_dict['dones'], dtype=torch.float).view(-1, 1).to(self.device)
 
-
-
-        # 更新两个 Q 网络
+        # 计算 TD 目标
         td_target = self.calc_target(rewards, next_states, dones)
-        critic_1_loss = torch.mean(
-            F.mse_loss(self.critic_1(states, actions), td_target.detach()))
-        critic_2_loss = torch.mean(
-            F.mse_loss(self.critic_2(states, actions), td_target.detach()))
+
+        # 使用 PER 权重计算 critic 损失，需将 mse_loss 的 reduction 设为 'none'
+        critic_1_loss = F.mse_loss(self.critic_1(states, actions), td_target.detach(), reduction='none')
+        critic_1_loss = (is_weights * critic_1_loss).mean()
+
+        critic_2_loss = F.mse_loss(self.critic_2(states, actions), td_target.detach(), reduction='none')
+        critic_2_loss = (is_weights * critic_2_loss).mean()
 
         self.critic_1_optimizer.zero_grad()
         critic_1_loss.backward()
@@ -141,15 +137,13 @@ class SAC:
         entropy = -log_prob
         q1_value = self.critic_1(states, new_actions)
         q2_value = self.critic_2(states, new_actions)
-        actor_loss = torch.mean(
-            -self.log_alpha.exp() * entropy - torch.min(q1_value, q2_value))
+        actor_loss = torch.mean(-self.log_alpha.exp() * entropy - torch.min(q1_value, q2_value))
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
 
         # 自动调节 alpha（温度系数）
         alpha_loss = (self.log_alpha.exp() * (entropy - self.target_entropy).detach()).mean()
-
         self.log_alpha_optimizer.zero_grad()
         alpha_loss.backward()
         self.log_alpha_optimizer.step()
@@ -157,4 +151,11 @@ class SAC:
         # 软更新目标网络
         self.soft_update(self.critic_1, self.target_critic_1)
         self.soft_update(self.critic_2, self.target_critic_2)
+
+        # 计算 TD 误差，用于更新 PER 中的优先级
+        td_error1 = torch.abs(self.critic_1(states, actions) - td_target.detach())
+        td_error2 = torch.abs(self.critic_2(states, actions) - td_target.detach())
+        td_errors = ((td_error1 + td_error2) / 2.0).detach().cpu().numpy()
+
+        return td_errors
 

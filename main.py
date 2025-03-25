@@ -2,7 +2,7 @@
 
 from env import armEnv
 from rl_algorithm import SAC
-from reply_buffer import ReplayBuffer
+from reply_buffer_per import ReplayBufferPER
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -45,7 +45,7 @@ next_obs_demo = demo_data["obs_next"]
 rewards_demo = demo_data["rewards"]
 done_demo = demo_data["done"]
 
-replay_buffer = ReplayBuffer(buffer_size)
+replay_buffer = ReplayBufferPER(buffer_size)
 num_episodes = len(obs_demo)
 
 for i in range(num_episodes):
@@ -62,7 +62,8 @@ for i in range(num_episodes):
             episode_act[j],
             episode_rewards[j],
             episode_next_obs[j],
-            episode_done[j]
+            episode_done[j],
+            is_expert = True
         )
 
 for episode in range(MAX_EPISODES):
@@ -80,8 +81,13 @@ for episode in range(MAX_EPISODES):
 
         # 当缓冲区中样本足够时，采样批次数据并更新 agent
         if replay_buffer.size() >= minimal_size:
-            batch = replay_buffer.sample(batch_size)
-            rl.update(batch)
+            # PER replay buffer 需要返回采样数据、样本索引和重要性采样权重
+            batch, indices, is_weights = replay_buffer.sample(batch_size)
+            # 将 is_weights 转换为 torch tensor，并发送到 device
+            is_weights = torch.tensor(is_weights, dtype=torch.float).to(device)
+            # 更新网络，update 返回的 TD 误差用于更新优先级
+            td_errors = rl.update(batch, is_weights)
+            replay_buffer.update_priorities(indices, td_errors)
         if done:
             break
         s = s_next
