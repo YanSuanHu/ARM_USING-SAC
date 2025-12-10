@@ -123,7 +123,7 @@ def collect_demo_data(env, max_timesteps,needed_success=demo_num):
                 z_total +=cola_pos[2]
             ep_obs .append(obs.copy())
             ep_acts.append(act.copy())
-            obs,reward,done = env.step(act)
+            obs,reward,done,info = env.step(act)
             reward_total += reward
             ep_rewards.append(reward)
             ep_next_obs.append(obs.copy())
@@ -136,7 +136,7 @@ def collect_demo_data(env, max_timesteps,needed_success=demo_num):
                 rewards_total.append(ep_rewards)
                 done_total.append(ep_done)
                 print(f"第 {episode_i + 1} 个 episode 成功，已收集成功示范 {success_count} 条。")
-                print("奖励为", reward_total)
+                print(obs[-3:])
                 break
     file = "master_data_dense.npz"
     print("完成！")
