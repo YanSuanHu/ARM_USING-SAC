@@ -99,11 +99,11 @@ class armEnv(gym.Env):
 
         # 2. 不要使用 p.resetSimulation()，只重置关节和位置
         # 重置机器人基座
-        p.resetBasePositionAndOrientation(self.robotId, self.robotStartPos, self.robotStartOrientation)
+        p.resetBasePositionAndOrientation(self.robotId[0], self.robotStartPos, self.robotStartOrientation)
 
         # 重置机器人关节 (这一步很重要，否则机器人会保持上一个episode的扭曲姿态)
-        for i in range(p.getNumJoints(self.robotId)):
-            p.resetJointState(self.robotId, i, targetValue=0, targetVelocity=0)
+        for i in range(p.getNumJoints(self.robotId[0])):
+            p.resetJointState(self.robotId[0], i, targetValue=0, targetVelocity=0)
 
         # 随机生成 Cola 和 Table 的相对位置
         rand_x_1 = self.np_random.uniform(-0.7, 0.2)
@@ -281,7 +281,7 @@ class armEnv(gym.Env):
             self.end_effector_link_index,  # 通常是末端执行器的链接索引(取决于具体机械臂模型)
             new_pos,  # 目标末端位置
             targetOrientation= fixed_target_orientation,
-            lowerLimits=ll, upperLimits=ul, jointRanges=jr, restPoses=rp
+            # lowerLimits=ll, upperLimits=ul, jointRanges=jr, restPoses=rp
         )
         # if Commands[-1]>0.5:
         #     close_gripper(self.robotId[0])

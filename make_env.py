@@ -1,5 +1,5 @@
 
-from env import armEnv  # 您的自定义环境
+from anotherArm import UR5RobotiqEnv as armEnv  # 您的自定义环境
 from stable_baselines3.common.monitor import Monitor
 def make_env(seed, rank=0,visuable=False):
 

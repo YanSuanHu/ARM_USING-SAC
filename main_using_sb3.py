@@ -13,7 +13,7 @@ if __name__ == "__main__":
     # 一些超参数
     seed = 42
     num_envs = 8
-    total_timesteps = 10000000
+    total_timesteps = 100000
 
     # 设置随机种子
     np.random.seed(seed)
@@ -41,7 +41,7 @@ if __name__ == "__main__":
         tensorboard_log="./sac_tensorboard_logs/",
         learning_rate=3e-4,  # 对应actor_lr/critic_lr
         buffer_size=1000000,  # 对应您的Replay Buffer大小
-        batch_size=1024,  # 采样批次大小
+        batch_size=512,  # 采样批次大小
         tau=0.005,  # 软更新系数
         gamma=0.99,  # 折扣因子
         ent_coef='auto',   # 如果想让alpha自动学习，可设置'ent_coef="auto"'
