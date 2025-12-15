@@ -1,6 +1,6 @@
 import pybullet as p
 import pybullet_data
-import gym
+# import gym
 import numpy as np
 import os
 import random
@@ -15,7 +15,7 @@ from make_env import make_env
 
 if __name__ == "__main__":
     # 指定要加载的模型路径
-    MODEL_PATH = "sac_armEnv_parallel_1.zip"
+    MODEL_PATH = "SAC_armEnv_parallel_final.zip"
 
     print(f"正在加载模型: {MODEL_PATH}")
 

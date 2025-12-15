@@ -10,11 +10,11 @@ import random
 
 
 class UR5RobotiqEnv(gym.Env):
-    def __init__(self, render=True):
+    def __init__(self, visuable=False):
         super(UR5RobotiqEnv, self).__init__()
 
         # 1. 初始化 PyBullet
-        self.render_mode = render
+        self.render_mode = visuable
         if self.render_mode:
             self.physics_client = p.connect(p.GUI)
         else:
@@ -47,13 +47,10 @@ class UR5RobotiqEnv(gym.Env):
         self.plane_id = p.loadURDF("plane.urdf")
         self.table_id = p.loadURDF("table/table.urdf", [0.5, 0, 0], p.getQuaternionFromEuler([0, 0, 0]))
 
-        # 你的环境里本来有的 tray 和 cube2 (障碍物)
-        # self.tray_id = p.loadURDF("tray/tray.urdf", [0.5, 0.9, 0.6], p.getQuaternionFromEuler([0, 0, 0]))
-        # self.cube_id2 = p.loadURDF("cube.urdf", [0.5, 0.9, 0.3], p.getQuaternionFromEuler([0, 0, 0]), globalScaling=0.6,
-        #                            useFixedBase=True)
-
+ 
         # 设置视角
-        self.set_gui_view()
+        if self.render_mode:
+            self.set_gui_view()
 
         # 加载机器人
         self.robot = UR5Robotiq85([0, 0, 0.62], [0, 0, 0])
@@ -75,6 +72,7 @@ class UR5RobotiqEnv(gym.Env):
         # 工作空间限制 (防止机械臂乱跑)
         self.workspace_low = np.array([0.2, -0.5, 0.63])  # 根据桌子高度调整
         self.workspace_high = np.array([0.8, 0.5, 1.2])
+        self.previous_cube_height = 0.65
 
     def set_gui_view(self):
         camera_distance = 1.2
@@ -113,6 +111,7 @@ class UR5RobotiqEnv(gym.Env):
             p.stepSimulation()
 
         self.target_pos = np.array(cube_start_pos)
+        self.previous_cube_height = 0.65
 
         # 获取初始观测
         obs = self._get_obs()
@@ -148,7 +147,7 @@ class UR5RobotiqEnv(gym.Env):
         self.robot.move_gripper(gripper_width)
 
         # 4. 步进仿真
-        for _ in range(8):
+        for _ in range(120):
             p.stepSimulation()
 
         # 4. 获取观测和奖励 (只在动作做完后计算一次)
@@ -195,16 +194,40 @@ class UR5RobotiqEnv(gym.Env):
 
         # 2. 接触奖励
         contact_points = p.getContactPoints(self.robot.id, self.cube_id)
-        if len(contact_points) > 0:
-            reward += 1.0
+        # The link index for the robot is the 3rd element in the contact point tuple
+        contact_links = set(item[3] for item in contact_points)
+        
+        # Gripper finger link IDs, assuming they are 12 and 17 from your friction setup
+        left_finger_contact = 12 in contact_links
+        right_finger_contact = 17 in contact_links
+
+        grasp_reward = 0
+        if left_finger_contact and right_finger_contact:
+            # Strong reward for a proper two-fingered grasp
+            grasp_reward = 1.0
+        elif left_finger_contact or right_finger_contact:
+            # Small reward for one-fingered contact to guide the agent,
+            # but not enough to make it a stable strategy.
+            grasp_reward = 0.25
+        reward+=grasp_reward
+
+        current_cube_height = cube_pos[2]
+        height_difference = current_cube_height - self.previous_cube_height
+        
+        # 给予一个与高度变化量成正比的奖励
+        # 向上移动会获得正奖励，向下移动会获得负奖励（惩罚）
+        # 乘以一个较大的系数来放大这个信号
+        lift_reward = height_difference * 100
+        reward += lift_reward
+        self.previous_cube_height = current_cube_height
 
         # 3. 成功判定 (抬起物体)
         # 假设桌面高度是 ~0.63，如果物体高度超过 0.75 认为抬起成功
         is_success = False
         if cube_pos[2] > 0.75:
-            reward += 100.0
+            reward += 200.0
             is_success = True
-            print("Success Picked!")
+            # print("Success Picked!")
 
         return reward, is_success
 
@@ -224,8 +247,8 @@ class UR5Robotiq85:
         self.max_velocity = 2.0  # 限制一下最大速度，让动作更平滑
 
     def load(self):
-        flags = p.URDF_USE_SELF_COLLISION
-        self.id = p.loadURDF('./models/urdf/ur5_robotiq_85.urdf', self.base_pos, self.base_ori, useFixedBase=True,flags=flags)
+        # flags = p.URDF_USE_SELF_COLLISION
+        self.id = p.loadURDF('./models/urdf/ur5_robotiq_85.urdf', self.base_pos, self.base_ori, useFixedBase=True)
         self.__parse_joint_info__()
         self.__setup_mimic_joints__()
         self.reset_pose()
@@ -302,25 +325,49 @@ class UR5Robotiq85:
                                        joint.name in mimic_children_names}
 
         for joint_id, multiplier in self.mimic_child_multiplier.items():
+            p.setJointMotorControl2(self.id, joint_id, p.VELOCITY_CONTROL, targetVelocity=0, force=0)
             c = p.createConstraint(self.id, self.mimic_parent_id, self.id, joint_id,
-                                   jointType=p.JOINT_GEAR, jointAxis=[0, 1, 0],
+                                   jointType=p.JOINT_GEAR, jointAxis=[1, 0, 0],
                                    parentFramePosition=[0, 0, 0], childFramePosition=[0, 0, 0])
-            p.changeConstraint(c, gearRatio=-multiplier, maxForce=100, erp=1)
+  
+            p.changeConstraint(c, gearRatio=-multiplier, maxForce=100, erp=0.8)
 
+
+    # def move_gripper(self, open_length):
+    #     """
+    #     控制夹爪开合
+    #     open_length: 目标宽度 (0 ~ 0.085m)
+    #     """
+    #     # 限制范围
+    #     open_length = np.clip(open_length, 0, 0.085)
+
+    #     # 根据几何关系计算角度 (Robotiq 85 specific)
+    #     open_angle = 0.715 - math.asin((open_length - 0.010) / 0.1143)
+
+    #     # 只控制 mimic parent 关节，其他关节会通过 Constraint 自动跟随
+    #     p.setJointMotorControl2(self.id, self.mimic_parent_id, p.POSITION_CONTROL, targetPosition=open_angle,
+    #                             force=100, maxVelocity=2.0)
+        
     def move_gripper(self, open_length):
-        """
-        控制夹爪开合
-        open_length: 目标宽度 (0 ~ 0.085m)
-        """
-        # 限制范围
         open_length = np.clip(open_length, 0, 0.085)
 
-        # 根据几何关系计算角度 (Robotiq 85 specific)
-        open_angle = 0.715 - math.asin((open_length - 0.010) / 0.1143)
+        # 线性映射：open_length=0.085 -> angle=0 (张开)
+        #         open_length=0     -> angle=0.8 (闭合)
+        target = (1.0 - open_length / 0.085) * 0.8
 
-        # 只控制 mimic parent 关节，其他关节会通过 Constraint 自动跟随
-        p.setJointMotorControl2(self.id, self.mimic_parent_id, p.POSITION_CONTROL, targetPosition=open_angle,
-                                force=50, maxVelocity=2.0)
+        # 再保险：按 joint limit 裁剪
+        jinfo = p.getJointInfo(self.id, self.mimic_parent_id)
+        lo, hi = jinfo[8], jinfo[9]
+        target = float(np.clip(target, lo, hi))
+
+        p.setJointMotorControl2(
+            self.id, self.mimic_parent_id,
+            p.POSITION_CONTROL,
+            targetPosition=target,
+            force=200,        # 给足力
+            maxVelocity=5.0   # 快一点，方便观察
+        )
+
 
     def move_arm_ik(self, target_pos, target_orn):
         """
@@ -344,50 +391,75 @@ class UR5Robotiq85:
         return p.getLinkState(self.id, self.eef_id)
 
 
-import numpy as np
+
+
+
+
 import time
+import math
 
 
-# 假设上面的环境代码保存在 ur5_env.py 文件中
-# from ur5_env import UR5RobotiqEnv
-# 如果你是在同一个文件中运行，直接使用类名即可
 
-def test_environment():
-    print("正在初始化环境...")
-    # 开启渲染模式 (render=True) 以便肉眼观察
-    env = UR5RobotiqEnv(render=True)
+def test_gripper_visualization():
+    """
+    一个专门用于可视化和测试 Robotiq 85 夹爪开合功能的脚本。
+    它会创建一个滑动条，让你可以手动控制夹爪的目标开合宽度。
+    """
+    # 1. 初始化 PyBullet GUI
+    physics_client = p.connect(p.GUI)
+    p.setAdditionalSearchPath(pybullet_data.getDataPath())
+    p.setGravity(0, 0, -9.8)
+    p.setRealTimeSimulation(0) # 我们将手动步进
 
-    # 1. 测试 Reset
-    print("测试 Reset...")
-    obs, info = env.reset()
-    print(f"初始观测维度: {obs.shape}")
-    print(f"初始观测值 (前5位): {obs[:5]}")
+    # 2. 加载基础场景
+    p.loadURDF("plane.urdf")
+    p.loadURDF("table/table.urdf", [0.5, 0, 0], p.getQuaternionFromEuler([0, 0, 0]))
 
-    # 2. 测试 Step 循环
-    print("\n开始随机动作测试 (50步)...")
-    for i in range(50):
-        # 随机采样动作 [dx, dy, dz, gripper]
-        action = env.action_space.sample()
+    # 3. 加载机器人
+    # 将机器人放置在桌子上方，方便观察
+    robot = UR5Robotiq85(pos=[0.5, 0, 0.63], ori=[0, 0, 0])
+    robot.load()
 
-        # 为了让动作稍微连贯一点，我们可以手动设置一个向下的动作
-        # action = np.array([0, 0, -0.5, -1]) # 尝试向下移动并张开爪子
+    # 4. 设置相机视角
+    p.resetDebugVisualizerCamera(
+        cameraDistance=0.5,
+        cameraYaw=90,
+        cameraPitch=-30,
+        cameraTargetPosition=[0.5, 0, 0.7]
+    )
 
-        obs, reward, terminated, truncated, info = env.step(action)
+    # 5. 创建一个 GUI 滑动条来控制夹爪
+    # open_length 范围是 0 (闭合) 到 0.085 (完全张开)
+    gripper_slider = p.addUserDebugParameter("Gripper Opening", 0, 0.085, 0.085)
 
-        # 打印部分信息
-        print(f"Step {i + 1}: Reward={reward:.4f}, Success={info['is_success']}")
+    print("="*50)
+    print("夹爪可视化测试已启动。")
+    print("请在GUI窗口中拖动 'Gripper Opening' 滑动条来控制夹爪。")
+    print("按 Ctrl+C 或关闭窗口来退出。")
+    print("="*50)
 
-        # 稍微暂停一下，方便观察 GUI
-        time.sleep(0.05)
+    # 6. 仿真循环
+    try:
+        while True:
+            # 读取滑动条的值
+            target_opening_length = p.readUserDebugParameter(gripper_slider)
 
-        if terminated or truncated:
-            print("Episode 结束，重置环境...")
-            obs, info = env.reset()
+            # 调用 move_gripper 函数
+            robot.move_gripper(target_opening_length)
 
-    print("\n测试完成，关闭环境。")
-    env.close()
+            # 步进仿真
+            p.stepSimulation()
+            
+            # 稍微延时，让渲染更平滑
+            time.sleep(1./240.)
+
+    except KeyboardInterrupt:
+        print("\n程序已退出。")
+    finally:
+        p.disconnect()
+  
 
 
 if __name__ == "__main__":
-    # 确保你的类定义在上面，或者已经 import 进来
-    test_environment()
+    print('start')
+    test_gripper_visualization()
