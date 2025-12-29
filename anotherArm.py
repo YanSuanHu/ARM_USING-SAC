@@ -147,7 +147,7 @@ class UR5RobotiqEnv(gym.Env):
         self.robot.move_gripper(gripper_width)
 
         # 4. 步进仿真
-        for _ in range(120):
+        for _ in range(20):
             p.stepSimulation()
 
         # 4. 获取观测和奖励 (只在动作做完后计算一次)
@@ -224,7 +224,7 @@ class UR5RobotiqEnv(gym.Env):
         # 3. 成功判定 (抬起物体)
         # 假设桌面高度是 ~0.63，如果物体高度超过 0.75 认为抬起成功
         is_success = False
-        if cube_pos[2] > 0.75:
+        if cube_pos[2] > 0.75 and left_finger_contact and right_finger_contact:
             reward += 200.0
             is_success = True
             # print("Success Picked!")

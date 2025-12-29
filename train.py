@@ -47,32 +47,32 @@ def main():
     env = SubprocVecEnv([make_env(seed=0,rank=i, visuable=False) for i in range(num_cpu)])
     lr_schedule = cosine_schedule(initial_value=0.0003, final_value=1e-6)
 
-    # model = A2C(
-    #     "MlpPolicy",
-    #     env,
-    #     verbose=1,
-    #     tensorboard_log="./a2c_tensorboard_logs/",
-    #     learning_rate=lr_schedule,
-    #     device=device  # Pass the explicitly determined device
+    model = A2C(
+        "MlpPolicy",
+        env,
+        verbose=1,
+        tensorboard_log="./a2c_tensorboard_logs/",
+        learning_rate=lr_schedule,
+        device=device  # Pass the explicitly determined device
         
-    # )
+    )
 
-    # print(f"--- Final check: Model is on device: {model.device} ---")
-    # model.learn(total_timesteps=2000000)
+    print(f"--- Final check: Model is on device: {model.device} ---")
+    model.learn(total_timesteps=4000000)
     
-    # # Save the model
-    # model.save("a2c_armEnv_parallel_final")
+    # Save the model
+    model.save("a2c_armEnv_parallel_final")
 
-    # model3 = DQN(
-    #     "MlpPolicy",
-    #     env,
-    #     verbose=1,
-    #     tensorboard_log="./dqn_tensorboard_logs/",
-    #     learning_rate=lr_schedule,
-    #     device=device  # Pass the explicitly determined device
-    # )
-    # model3.learn(total_timesteps=2000000)
-    # model3.save("dqn_armEnv_parallel_final")
+    model3 = PPO(
+        "MlpPolicy",
+        env,
+        verbose=1,
+        tensorboard_log="./ppo_tensorboard_logs/",
+        learning_rate=lr_schedule,
+        device=device  # Pass the explicitly determined device
+    )
+    model3.learn(total_timesteps=4000000)
+    model3.save("ppo_armEnv_parallel_final")
 
     model2 = TD3(
         "MlpPolicy",
@@ -82,10 +82,21 @@ def main():
         learning_rate=lr_schedule,
         device=device  # Pass the explicitly determined device
     )
-    model2.learn(total_timesteps=2000000)
+    model2.learn(total_timesteps=4000000)
     model2.save("td3_armEnv_parallel_final")
+
+    model4 = SAC(
+        "MlpPolicy",
+        env,
+        verbose=1,
+        tensorboard_log="./sac_tensorboard_logs/",
+        learning_rate=lr_schedule,
+        device=device  # Pass the explicitly determined device
+    )
+    model4.learn(total_timesteps=4000000)
+    model4.save("sac_armEnv_parallel_final")
 
 
 if __name__ == "__main__":
-    print("--- Starting training ---")
+    print("开始训练")
     main()
