@@ -4,6 +4,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3 import SAC,PPO,A2C,TD3
 from make_env import make_env
+from make_env_copy import make_env as make_env_copy
 import math
 from typing import Callable
 
@@ -44,59 +45,36 @@ def main():
         print("--- MPS not available. Setting device to 'cpu'. ---")
 
     num_cpu = 8  # Number of parallel environments
-    env = SubprocVecEnv([make_env(seed=0,rank=i, visuable=False) for i in range(num_cpu)])
+    env1 = SubprocVecEnv([make_env(seed=0,rank=i, visuable=False) for i in range(num_cpu)])
     lr_schedule = cosine_schedule(initial_value=0.0003, final_value=1e-6)
 
-    model = A2C(
-        "MlpPolicy",
-        env,
-        verbose=1,
-        tensorboard_log="./a2c_tensorboard_logs/",
-        learning_rate=lr_schedule,
-        device=device  # Pass the explicitly determined device
-        
-    )
 
-    print(f"--- Final check: Model is on device: {model.device} ---")
-    model.learn(total_timesteps=4000000)
-    
-    # Save the model
-    model.save("a2c_armEnv_parallel_final")
-
-    model3 = PPO(
-        "MlpPolicy",
-        env,
-        verbose=1,
-        tensorboard_log="./ppo_tensorboard_logs/",
-        learning_rate=lr_schedule,
-        device=device  # Pass the explicitly determined device
-    )
-    model3.learn(total_timesteps=4000000)
-    model3.save("ppo_armEnv_parallel_final")
-
-    model2 = TD3(
-        "MlpPolicy",
-        env,
-        verbose=1,
-        tensorboard_log="./td3_tensorboard_logs/",
-        learning_rate=lr_schedule,
-        device=device  # Pass the explicitly determined device
-    )
-    model2.learn(total_timesteps=4000000)
-    model2.save("td3_armEnv_parallel_final")
 
     model4 = SAC(
         "MlpPolicy",
-        env,
+        env1,
         verbose=1,
-        tensorboard_log="./sac_tensorboard_logs/",
+        tensorboard_log="./sac_tensorboard_logs_without_IK/",
         learning_rate=lr_schedule,
         device=device  # Pass the explicitly determined device
     )
     model4.learn(total_timesteps=4000000)
-    model4.save("sac_armEnv_parallel_final")
+    model4.save("sac_armEnv_parallel_final_without_IK")
+    env1.close()
+
+    # env2 = SubprocVecEnv([make_env_copy(seed=0,rank=i, visuable=False) for i in range(num_cpu)])
+    # model5 = SAC(
+    #     "MlpPolicy",
+    #     env2,
+    #     verbose=1,
+    #     tensorboard_log="./sac_tensorboard_logs_with_IK/",
+    #     learning_rate=lr_schedule,
+    #     device=device  # Pass the explicitly determined device
+    # )
+    # model5.learn(total_timesteps=4000000)
+    # model5.save("sac_armEnv_parallel_final_with_IK")
 
 
 if __name__ == "__main__":
-    print("开始训练")
+    print("消融实验训练SAC模型第二次")
     main()

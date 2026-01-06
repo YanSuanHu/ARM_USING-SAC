@@ -15,7 +15,7 @@ from make_env import make_env
 
 if __name__ == "__main__":
     # 指定要加载的模型路径
-    MODEL_PATH = "SAC_armEnv_parallel_final.zip"
+    MODEL_PATH = "SAC_armEnv_parallel_final_without_IK.zip"
 
     print(f"正在加载模型: {MODEL_PATH}")
 
